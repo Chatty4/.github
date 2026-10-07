@@ -1,0 +1,128 @@
+# Reusable CI for the Chatty Python services (chatty-core, chatty-chat).
+#
+# Call it from a repo's .github/workflows/ci.yml:
+#
+#   jobs:
+#     ci:
+#       uses: Chatty4/.github/.github/workflows/python-ci.yml@dev
+#       with:
+#         needs-postgres: true
+#         test-env: |
+#           SECRET_KEY=ci-not-secret
+#           DEBUG=False
+
+name: Python CI
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: Python version for setup-python.
+        type: string
+        default: "3.14"
+      working-directory:
+        description: Directory that holds requirements.txt and pyproject.toml.
+        type: string
+        default: "."
+      run-tests:
+        description: Run pytest. Set to false while a repo has no tests (pytest exits 5 on none).
+        type: boolean
+        default: true
+      needs-postgres:
+        description: Start a Postgres 17 service and export DATABASE_URL for the tests.
+        type: boolean
+        default: false
+      postgres-db:
+        type: string
+        default: test_db
+      postgres-user:
+        type: string
+        default: test_user
+      postgres-password:
+        type: string
+        default: test_pass
+      test-env:
+        description: Extra KEY=VALUE lines exported before pytest runs. Not for real secrets.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+          cache-dependency-path: ${{ inputs.working-directory }}/requirements.txt
+
+      # Install only the pinned ruff from requirements.txt, so lint stays fast and matches local runs.
+      - name: Install ruff
+        run: |
+          ruff_pin="$(grep -iE '^ruff==' requirements.txt || true)"
+          pip install "${ruff_pin:-ruff}"
+
+      - name: ruff check
+        run: ruff check --output-format=github .
+
+      - name: ruff format --check
+        run: ruff format --check .
+
+  test:
+    name: Tests
+    if: inputs.run-tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    services:
+      postgres:
+        # An empty image skips the service container when the repo doesn't need Postgres.
+        image: ${{ inputs.needs-postgres && 'postgres:17-alpine' || '' }}
+        env:
+          POSTGRES_DB: ${{ inputs.postgres-db }}
+          POSTGRES_USER: ${{ inputs.postgres-user }}
+          POSTGRES_PASSWORD: ${{ inputs.postgres-password }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ${{ inputs.postgres-user }} -d ${{ inputs.postgres-db }}"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+          cache-dependency-path: ${{ inputs.working-directory }}/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 127.0.0.1, not localhost: same rule as local dev (see chatty-core CLAUDE.md).
+      - name: Export DATABASE_URL
+        if: inputs.needs-postgres
+        run: >-
+          echo "DATABASE_URL=postgres://${{ inputs.postgres-user }}:${{ inputs.postgres-password }}@127.0.0.1:5432/${{ inputs.postgres-db }}"
+          >> "$GITHUB_ENV"
+
+      - name: Export test env
+        if: inputs.test-env != ''
+        env:
+          TEST_ENV: ${{ inputs.test-env }}
+        run: printf '%s\n' "$TEST_ENV" | grep -v '^[[:space:]]*$' >> "$GITHUB_ENV"
+
+      - name: pytest
+        run: pytest
