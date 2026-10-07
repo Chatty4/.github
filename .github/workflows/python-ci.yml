@@ -45,6 +45,10 @@ on:
         description: Extra KEY=VALUE lines exported before pytest runs. Not for real secrets.
         type: string
         default: ""
+      pre-test-commands:
+        description: Shell commands run after the env is set up and before pytest, one per line.
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -123,6 +127,13 @@ jobs:
         env:
           TEST_ENV: ${{ inputs.test-env }}
         run: printf '%s\n' "$TEST_ENV" | grep -v '^[[:space:]]*$' >> "$GITHUB_ENV"
+
+      # Passed through env, not inlined with ${{ }}, so the commands are never templated into the script.
+      - name: Pre-test checks
+        if: inputs.pre-test-commands != ''
+        env:
+          PRE_TEST_COMMANDS: ${{ inputs.pre-test-commands }}
+        run: bash -eo pipefail -xc "$PRE_TEST_COMMANDS"
 
       - name: pytest
         run: pytest
