@@ -41,12 +41,24 @@ on:
       postgres-password:
         type: string
         default: test_pass
+      database-url-scheme:
+        description: Scheme for DATABASE_URL, e.g. postgresql+asyncpg for SQLAlchemy async.
+        type: string
+        default: postgres
+      needs-redis:
+        description: Start a Redis 7 service and export REDIS_URL for the tests.
+        type: boolean
+        default: false
       test-env:
         description: Extra KEY=VALUE lines exported before pytest runs. Not for real secrets.
         type: string
         default: ""
       pre-test-commands:
         description: Shell commands run after the env is set up and before pytest, one per line.
+        type: string
+        default: ""
+      pytest-args:
+        description: Extra arguments for pytest, e.g. -m "not integration".
         type: string
         default: ""
 
@@ -103,6 +115,15 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      redis:
+        image: ${{ inputs.needs-redis && 'redis:7-alpine' || '' }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v5
 
@@ -119,8 +140,12 @@ jobs:
       - name: Export DATABASE_URL
         if: inputs.needs-postgres
         run: >-
-          echo "DATABASE_URL=postgres://${{ inputs.postgres-user }}:${{ inputs.postgres-password }}@127.0.0.1:5432/${{ inputs.postgres-db }}"
+          echo "DATABASE_URL=${{ inputs.database-url-scheme }}://${{ inputs.postgres-user }}:${{ inputs.postgres-password }}@127.0.0.1:5432/${{ inputs.postgres-db }}"
           >> "$GITHUB_ENV"
+
+      - name: Export REDIS_URL
+        if: inputs.needs-redis
+        run: echo "REDIS_URL=redis://127.0.0.1:6379/0" >> "$GITHUB_ENV"
 
       - name: Export test env
         if: inputs.test-env != ''
@@ -135,5 +160,8 @@ jobs:
           PRE_TEST_COMMANDS: ${{ inputs.pre-test-commands }}
         run: bash -eo pipefail -xc "$PRE_TEST_COMMANDS"
 
+      # eval keeps quoted args together, e.g. -m "not integration" stays one -m value.
       - name: pytest
-        run: pytest
+        env:
+          PYTEST_ARGS: ${{ inputs.pytest-args }}
+        run: eval "pytest $PYTEST_ARGS"
