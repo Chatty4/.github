@@ -30,7 +30,10 @@ jobs:
 | `run-tests` | `true` | Run pytest. Set `false` while a repo has no tests |
 | `needs-postgres` | `false` | Start Postgres 17 and export `DATABASE_URL` (on `127.0.0.1`) |
 | `postgres-db` / `-user` / `-password` | `test_db` / `test_user` / `test_pass` | Credentials for that throwaway database |
+| `database-url-scheme` | `postgres` | Scheme for `DATABASE_URL`, e.g. `postgresql+asyncpg` for SQLAlchemy async |
+| `needs-redis` | `false` | Start Redis 7 and export `REDIS_URL=redis://127.0.0.1:6379/0` |
 | `test-env` | empty | Extra `KEY=VALUE` lines exported before pytest. Not for real secrets |
 | `pre-test-commands` | empty | Shell commands run before pytest, one per line (e.g. `python manage.py check`). The first failing command fails the job |
+| `pytest-args` | empty | Extra pytest arguments, e.g. `-m "not integration"` |
 
 Lint installs only the `ruff==` pin from `requirements.txt`, so CI uses the same ruff version as local runs.
