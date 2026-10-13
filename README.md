@@ -37,5 +37,6 @@ jobs:
 | `pytest-args` | empty | Extra pytest arguments, e.g. `-m "not integration"` |
 | `docker-build` | `false` | Build the `Dockerfile` in `working-directory` (no push), so a broken image fails CI |
 | `audit` | `true` | Check the pins in `requirements.txt` for known vulnerabilities with `pip-audit`. Non-blocking: a finding shows as a failed "Audit" job, but the run stays green |
+| `mypy` | `false` | Type-check with `mypy .`, using the repo's `[tool.mypy]` config and `test-env`. Uses the `mypy==` pin from `requirements.txt` if there is one. Add the config and fix the errors before turning it on |
 
 Lint installs only the `ruff==` pin from `requirements.txt`, so CI uses the same ruff version as local runs.

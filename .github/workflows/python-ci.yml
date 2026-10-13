@@ -69,6 +69,10 @@ on:
         description: Check requirements.txt for known vulnerabilities with pip-audit. Never fails the run.
         type: boolean
         default: true
+      mypy:
+        description: Type-check with mypy (config in the repo's pyproject.toml). Uses test-env.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -211,3 +215,37 @@ jobs:
       # without installing them.
       - name: pip-audit
         run: pip-audit --disable-pip --no-deps --progress-spinner off -r requirements.txt
+
+  types:
+    name: Types
+    if: inputs.mypy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+          cache-dependency-path: ${{ inputs.working-directory }}/requirements.txt
+
+      # mypy needs the real packages and their stubs (django-stubs, ...) to check against.
+      # Same pin rule as ruff: the mypy== line from requirements.txt if there is one.
+      - name: Install dependencies and mypy
+        run: |
+          pip install -r requirements.txt
+          mypy_pin="$(grep -iE '^mypy==' requirements.txt || true)"
+          pip install "${mypy_pin:-mypy==1.15.0}"
+
+      # The django-stubs plugin imports the settings, which read env variables (SECRET_KEY, ...).
+      - name: Export test env
+        if: inputs.test-env != ''
+        env:
+          TEST_ENV: ${{ inputs.test-env }}
+        run: printf '%s\n' "$TEST_ENV" | grep -v '^[[:space:]]*$' >> "$GITHUB_ENV"
+
+      - name: mypy
+        run: mypy .
