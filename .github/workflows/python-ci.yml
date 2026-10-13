@@ -61,6 +61,10 @@ on:
         description: Extra arguments for pytest, e.g. -m "not integration".
         type: string
         default: ""
+      docker-build:
+        description: Build the Dockerfile in working-directory (no push), so a broken image fails CI.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -165,3 +169,17 @@ jobs:
         env:
           PYTEST_ARGS: ${{ inputs.pytest-args }}
         run: eval "pytest $PYTEST_ARGS"
+
+  docker:
+    name: Docker build
+    if: inputs.docker-build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # Build only: nothing is pushed. Catches a broken Dockerfile or .dockerignore before a deploy does.
+      - name: docker build
+        run: docker build .

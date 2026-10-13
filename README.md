@@ -35,5 +35,6 @@ jobs:
 | `test-env` | empty | Extra `KEY=VALUE` lines exported before pytest. Not for real secrets |
 | `pre-test-commands` | empty | Shell commands run before pytest, one per line (e.g. `python manage.py check`). The first failing command fails the job |
 | `pytest-args` | empty | Extra pytest arguments, e.g. `-m "not integration"` |
+| `docker-build` | `false` | Build the `Dockerfile` in `working-directory` (no push), so a broken image fails CI |
 
 Lint installs only the `ruff==` pin from `requirements.txt`, so CI uses the same ruff version as local runs.
