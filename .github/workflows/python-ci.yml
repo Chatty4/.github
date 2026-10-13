@@ -65,6 +65,10 @@ on:
         description: Build the Dockerfile in working-directory (no push), so a broken image fails CI.
         type: boolean
         default: false
+      audit:
+        description: Check requirements.txt for known vulnerabilities with pip-audit. Never fails the run.
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -183,3 +187,27 @@ jobs:
       # Build only: nothing is pushed. Catches a broken Dockerfile or .dockerignore before a deploy does.
       - name: docker build
         run: docker build .
+
+  audit:
+    name: Audit
+    if: inputs.audit
+    runs-on: ubuntu-latest
+    # Non-blocking for now: a finding shows as a failed job, but the run and the PR stay green.
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install pip-audit
+        run: pip install pip-audit==2.9.0
+
+      # requirements.txt is fully pinned (pip freeze), so the pins are checked as they are,
+      # without installing them.
+      - name: pip-audit
+        run: pip-audit --disable-pip --no-deps --progress-spinner off -r requirements.txt
