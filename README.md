@@ -32,6 +32,9 @@ jobs:
 | `postgres-db` / `-user` / `-password` | `test_db` / `test_user` / `test_pass` | Credentials for that throwaway database |
 | `database-url-scheme` | `postgres` | Scheme for `DATABASE_URL`, e.g. `postgresql+asyncpg` for SQLAlchemy async |
 | `needs-redis` | `false` | Start Redis 7 and export `REDIS_URL=redis://127.0.0.1:6379/0` |
+| `needs-kafka` | `false` | Start a single-node Kafka 3.9 and export `KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:9092`. Tests create their own topics |
+| `needs-minio` | `false` | Start MinIO (same image as chatty-infra), create `minio-bucket`, and export `MINIO_INTERNAL_URL`, `MINIO_PUBLIC_URL` (both `http://127.0.0.1:9000`), `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` (a throwaway root login) and `MINIO_BUCKET` |
+| `minio-bucket` | `chatty` | Bucket created when `needs-minio` is on |
 | `test-env` | empty | Extra `KEY=VALUE` lines exported before pytest. Not for real secrets |
 | `pre-test-commands` | empty | Shell commands run before pytest, one per line (e.g. `python manage.py check`). The first failing command fails the job |
 | `pytest-args` | empty | Extra pytest arguments, e.g. `-m "not integration"` |

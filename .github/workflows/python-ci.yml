@@ -54,6 +54,14 @@ on:
         description: Start a single-node Kafka 3.9 (KRaft) and export KAFKA_BOOTSTRAP_SERVERS for the tests.
         type: boolean
         default: false
+      needs-minio:
+        description: Start MinIO, create minio-bucket and export the MINIO_* settings for the tests.
+        type: boolean
+        default: false
+      minio-bucket:
+        description: Bucket created when needs-minio is on.
+        type: string
+        default: chatty
       test-env:
         description: Extra KEY=VALUE lines exported before pytest runs. Not for real secrets.
         type: string
@@ -166,8 +174,24 @@ jobs:
           --health-timeout 10s
           --health-retries 10
           --health-start-period 20s
+    env:
+      # Throwaway root login for the CI MinIO, like the Postgres test credentials.
+      CI_MINIO_USER: ci_minio_user
+      CI_MINIO_PASSWORD: ci_minio_password
     steps:
       - uses: actions/checkout@v5
+
+      # A step, not a service container: services can't pass the "server /data" command MinIO needs.
+      # Started first, so it boots while pip installs. Same image and digest as chatty-infra's
+      # docker-compose.yml; update both together.
+      - name: Start MinIO
+        if: inputs.needs-minio
+        run: >-
+          docker run -d --name minio -p 127.0.0.1:9000:9000
+          -e MINIO_ROOT_USER="$CI_MINIO_USER" -e MINIO_ROOT_PASSWORD="$CI_MINIO_PASSWORD"
+          -e MC_HOST_local="http://$CI_MINIO_USER:$CI_MINIO_PASSWORD@localhost:9000"
+          cgr.dev/chainguard/minio:latest@sha256:a05a4497e8dce3cb7a7a1bf1872ba5d30ea988f1e8c22c9e0920503761c4b5f1
+          server /data
 
       - uses: actions/setup-python@v6
         with:
@@ -192,6 +216,28 @@ jobs:
       - name: Export KAFKA_BOOTSTRAP_SERVERS
         if: inputs.needs-kafka
         run: echo "KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:9092" >> "$GITHUB_ENV"
+
+      # The tests use the root login, so they can use every prefix; the per-service users and
+      # policies are created by chatty-infra's setup.bat, not here. Both URLs are the same on a
+      # runner: there is no separate address for a browser.
+      - name: Wait for MinIO, create the bucket, export MINIO_*
+        if: inputs.needs-minio
+        env:
+          MINIO_BUCKET: ${{ inputs.minio-bucket }}
+        run: |
+          for _ in $(seq 1 30); do
+            docker exec minio mc ready local >/dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec minio mc ready local || { docker logs minio; exit 1; }
+          docker exec minio mc mb --ignore-existing "local/$MINIO_BUCKET"
+          {
+            echo "MINIO_INTERNAL_URL=http://127.0.0.1:9000"
+            echo "MINIO_PUBLIC_URL=http://127.0.0.1:9000"
+            echo "MINIO_ACCESS_KEY=$CI_MINIO_USER"
+            echo "MINIO_SECRET_KEY=$CI_MINIO_PASSWORD"
+            echo "MINIO_BUCKET=$MINIO_BUCKET"
+          } >> "$GITHUB_ENV"
 
       - name: Export test env
         if: inputs.test-env != ''
